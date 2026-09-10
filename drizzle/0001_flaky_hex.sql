@@ -1,0 +1,1 @@
+ALTER TYPE "public"."notification_type" ADD VALUE 'PAYMENT_REMINDER_MANUAL' BEFORE 'WELCOME';

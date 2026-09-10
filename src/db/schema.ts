@@ -157,6 +157,7 @@ export const notificationTypeEnum = pgEnum("notification_type", [
   "PAYMENT_UPCOMING",
   "PAYMENT_DUE_TODAY",
   "PAYMENT_OVERDUE",
+  "PAYMENT_REMINDER_MANUAL",
   "WELCOME",
   "REGISTRATION_APPROVED",
   "REGISTRATION_REJECTED",

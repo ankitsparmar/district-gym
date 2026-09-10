@@ -8,6 +8,13 @@
       "when": 1789055513464,
       "tag": "0000_slim_cloak",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789058585044,
+      "tag": "0001_flaky_hex",
+      "breakpoints": true
     }
   ]
 }

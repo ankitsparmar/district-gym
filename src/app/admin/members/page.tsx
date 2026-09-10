@@ -1,7 +1,9 @@
 import { db, schema } from "@/db";
 import { and, desc, eq, ilike, inArray, or } from "drizzle-orm";
+import { auth } from "@/auth";
 import { Card, Badge, Button, Input, EmptyState } from "@/components/ui/primitives";
 import { formatDate, classifyDueDate } from "@/lib/business";
+import { SmsReminderButton } from "./sms-reminder-button";
 import Link from "next/link";
 
 export const dynamic = "force-dynamic";
@@ -14,6 +16,10 @@ export default async function MembersListPage({
   const sp = await searchParams;
   const q = sp.q?.trim();
   const status = sp.status;
+
+  const session = await auth();
+  const role = (session?.user as any)?.role as string | undefined;
+  const canMessageMembers = role === "ADMIN" || role === "MANAGER" || role === "FRONT_DESK";
 
   const conditions = [];
   if (q) {
@@ -37,6 +43,7 @@ export default async function MembersListPage({
       lastName: schema.members.lastName,
       memberCode: schema.members.memberCode,
       email: schema.members.email,
+      phone: schema.members.phone,
       status: schema.members.status,
       createdAt: schema.members.createdAt,
     })
@@ -104,6 +111,7 @@ export default async function MembersListPage({
                 <th className="px-2 py-2 font-medium">Status</th>
                 <th className="px-2 py-2 font-medium">Next due</th>
                 <th className="px-2 py-2 font-medium">Joined</th>
+                {canMessageMembers && <th className="px-2 py-2 font-medium">Payment reminder</th>}
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--dg-line)]">
@@ -134,6 +142,15 @@ export default async function MembersListPage({
                       )}
                     </td>
                     <td className="px-2 py-3 text-[var(--dg-slate)]">{formatDate(m.createdAt)}</td>
+                    {canMessageMembers && (
+                      <td className="px-2 py-3">
+                        <SmsReminderButton
+                          memberId={m.id}
+                          disabled={!m.phone}
+                          disabledReason={!m.phone ? "No phone number on file" : undefined}
+                        />
+                      </td>
+                    )}
                   </tr>
                 );
               })}

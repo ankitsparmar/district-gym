@@ -2,7 +2,7 @@ import { db, schema } from "@/db";
 import { and, eq, gte, lte, sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
 import { classifyDueDate } from "@/lib/business";
-import { notifyBothChannels } from "@/lib/notify";
+import { notify, notifyBothChannels } from "@/lib/notify";
 import { logAudit } from "@/lib/audit";
 import { differenceInCalendarDays } from "date-fns";
 
@@ -63,13 +63,28 @@ async function runReminders() {
     const bucket = classifyDueDate(dueDate, REMINDER_WINDOW_DAYS);
 
     if (bucket === "UPCOMING") {
+      const daysUntilDue = differenceInCalendarDays(dueDate, new Date());
       if (!(await alreadyNotifiedToday(m.memberId, "PAYMENT_UPCOMING"))) {
-        await notifyBothChannels({
-          memberId: m.memberId,
-          type: "PAYMENT_UPCOMING",
-          subject: "Your District Gym payment is coming up",
-          body: `Hi ${m.firstName}, your next payment of your membership is due on ${dueDate.toDateString()}. Please visit the front desk or pay online to stay active.`,
-        });
+        if (daysUntilDue === 1) {
+          // The specific "1 day before" reminder: SMS (+ email) so it reaches
+          // the member's phone the day before payment is due, not just inbox.
+          await notifyBothChannels({
+            memberId: m.memberId,
+            type: "PAYMENT_UPCOMING",
+            subject: "Your District Gym payment is due tomorrow",
+            body: `Hi ${m.firstName}, your membership payment is due tomorrow (${dueDate.toDateString()}). Please visit the front desk or pay online to stay active.`,
+          });
+        } else {
+          // Earlier heads-up (2-3 days out, per REMINDER_WINDOW_DAYS): email
+          // only, so members aren't texted multiple times for one payment.
+          await notify({
+            memberId: m.memberId,
+            channel: "EMAIL",
+            type: "PAYMENT_UPCOMING",
+            subject: "Your District Gym payment is coming up",
+            body: `Hi ${m.firstName}, your next membership payment is due on ${dueDate.toDateString()}. Please visit the front desk or pay online to stay active.`,
+          });
+        }
         upcomingCount++;
       }
     } else if (bucket === "DUE_TODAY") {
