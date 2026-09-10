@@ -40,11 +40,28 @@ export async function updatePlan(formData: FormData) {
   const { userId } = await requireStaff(["ADMIN", "MANAGER"]);
   const id = Number(formData.get("id"));
   const name = String(formData.get("name"));
+  const type = String(formData.get("type")) as any;
   const price = String(formData.get("price"));
+  const billingIntervalMonths = Number(formData.get("billingIntervalMonths") || 1);
+  const visitsIncluded = formData.get("visitsIncluded") ? Number(formData.get("visitsIncluded")) : null;
+  const familyMaxMembers = formData.get("familyMaxMembers") ? Number(formData.get("familyMaxMembers")) : null;
   const description = String(formData.get("description") || "");
 
-  await db.update(schema.plans).set({ name, price, description }).where(eq(schema.plans.id, id));
-  await logAudit({ actorUserId: userId, action: "plan.updated", entityType: "plan", entityId: id });
+  const [before] = await db.select().from(schema.plans).where(eq(schema.plans.id, id)).limit(1);
+  if (!before) return;
+
+  await db
+    .update(schema.plans)
+    .set({ name, type, price, billingIntervalMonths, visitsIncluded, familyMaxMembers, description })
+    .where(eq(schema.plans.id, id));
+
+  await logAudit({
+    actorUserId: userId,
+    action: "plan.updated",
+    entityType: "plan",
+    entityId: id,
+    details: { before, after: { name, type, price, billingIntervalMonths, visitsIncluded, familyMaxMembers, description } },
+  });
   revalidatePath("/admin/plans");
   revalidatePath("/");
 }
