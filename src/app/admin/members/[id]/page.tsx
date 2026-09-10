@@ -3,6 +3,7 @@ import { desc, eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 import { auth } from "@/auth";
 import { Card, CardHeader, Badge, Button, Input, Select, Textarea } from "@/components/ui/primitives";
+import { ConfirmForm } from "@/components/confirm-form";
 import { formatDate, formatMoney, classifyDueDate } from "@/lib/business";
 import { initials } from "@/lib/utils";
 import QRCode from "qrcode";
@@ -12,6 +13,8 @@ import {
   freezeMembership,
   unfreezeMembership,
   changePlan,
+  updateMembership,
+  deleteMembership,
   recordRenewalPayment,
   recordAdHocPayment,
   issueRefund,
@@ -277,6 +280,83 @@ export default async function MemberProfilePage({ params }: { params: Promise<{ 
                   ))}
                 </div>
               </div>
+            )}
+
+            {canManageFinance && (
+              <details className="border-t border-[var(--dg-line)] pt-4">
+                <summary className="cursor-pointer text-xs font-semibold uppercase tracking-wide text-[var(--dg-slate)]">
+                  Edit or delete this membership
+                </summary>
+                <div className="mt-4 grid gap-6 sm:grid-cols-2">
+                  <form action={updateMembership} className="space-y-2">
+                    <input type="hidden" name="membershipId" value={membership.id} />
+                    <input type="hidden" name="memberId" value={memberId} />
+                    <p className="text-xs font-medium text-[var(--dg-slate)]">
+                      Direct edit — corrects the record without proration or an invoice. Use &ldquo;Change plan&rdquo;
+                      above for a real upgrade/downgrade.
+                    </p>
+                    <Select name="planId" label="Plan" defaultValue={membership.planId}>
+                      {allPlans.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </Select>
+                    <Select name="status" label="Status" defaultValue={membership.status}>
+                      <option value="ACTIVE">Active</option>
+                      <option value="FROZEN">Frozen</option>
+                      <option value="SUSPENDED">Suspended</option>
+                      <option value="CANCELLED">Cancelled</option>
+                      <option value="EXPIRED">Expired</option>
+                    </Select>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input type="date" name="startDate" label="Start date" defaultValue={membership.startDate ?? ""} />
+                      <Input type="date" name="nextDueDate" label="Next due" defaultValue={membership.nextDueDate ?? ""} />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        name="priceAtSignup"
+                        label="Price"
+                        defaultValue={membership.priceAtSignup}
+                      />
+                      <Input
+                        type="number"
+                        name="visitsRemaining"
+                        label="Visits remaining"
+                        defaultValue={membership.visitsRemaining ?? ""}
+                        placeholder="unlimited"
+                      />
+                    </div>
+                    <label className="flex items-center gap-2 text-xs text-[var(--dg-slate)]">
+                      <input type="checkbox" name="autoRenew" defaultChecked={membership.autoRenew} className="rounded" />
+                      Auto-renew
+                    </label>
+                    <Button type="submit" size="sm" variant="outline" className="w-full justify-center">
+                      Save changes
+                    </Button>
+                  </form>
+
+                  <div className="space-y-2 rounded-lg border border-red-200 bg-red-50/50 p-4">
+                    <p className="text-xs font-semibold text-red-700">Delete membership</p>
+                    <p className="text-xs text-red-700/80">
+                      Removes this membership and its freeze/renewal history. Invoices and payments already recorded
+                      are kept (just detached) so the financial trail isn&rsquo;t affected. This can&rsquo;t be undone.
+                    </p>
+                    <ConfirmForm
+                      action={deleteMembership}
+                      confirmMessage={`Delete this ${currentPlan?.name ?? "membership"} membership for ${member.firstName} ${member.lastName}? Invoices/payments already recorded will be kept but unlinked from it. This can't be undone.`}
+                    >
+                      <input type="hidden" name="membershipId" value={membership.id} />
+                      <input type="hidden" name="memberId" value={memberId} />
+                      <Button type="submit" variant="danger" size="sm" className="w-full justify-center">
+                        Delete membership
+                      </Button>
+                    </ConfirmForm>
+                  </div>
+                </div>
+              </details>
             )}
           </div>
         ) : (

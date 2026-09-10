@@ -189,6 +189,79 @@ export async function changePlan(formData: FormData) {
   revalidateMember(memberId);
 }
 
+// --- Membership: direct edit / delete --------------------------------------
+// Unlike changePlan (above), this makes no proration calculation or invoice
+// — it's a raw correction tool for staff to fix data-entry mistakes
+// (wrong start date, wrong price typed at signup, etc.), not a customer-
+// facing plan change. Restricted to ADMIN/MANAGER and audit-logged.
+
+export async function updateMembership(formData: FormData) {
+  const { userId } = await requireStaff(["ADMIN", "MANAGER"]);
+  const membershipId = Number(formData.get("membershipId"));
+  const memberId = Number(formData.get("memberId"));
+  const planId = Number(formData.get("planId"));
+  const status = String(formData.get("status")) as (typeof schema.memberships.$inferSelect)["status"];
+  const startDate = String(formData.get("startDate"));
+  const nextDueDate = String(formData.get("nextDueDate") || "") || null;
+  const priceAtSignup = String(formData.get("priceAtSignup"));
+  const visitsRemaining = formData.get("visitsRemaining") ? Number(formData.get("visitsRemaining")) : null;
+  const autoRenew = formData.get("autoRenew") === "on";
+
+  const [before] = await db.select().from(schema.memberships).where(eq(schema.memberships.id, membershipId)).limit(1);
+  if (!before) return;
+
+  await db
+    .update(schema.memberships)
+    .set({ planId, status, startDate, nextDueDate, priceAtSignup, visitsRemaining, autoRenew })
+    .where(eq(schema.memberships.id, membershipId));
+
+  // Keep the member's own status roughly in sync when an admin edits the
+  // membership status directly (mirrors what freeze/suspend/reactivate do).
+  // "EXPIRED" has no equivalent on the member record, so leave that as-is.
+  const memberStatuses = ["PENDING", "ACTIVE", "FROZEN", "SUSPENDED", "CANCELLED"] as const;
+  if (status !== before.status && (memberStatuses as readonly string[]).includes(status)) {
+    await db
+      .update(schema.members)
+      .set({ status: status as (typeof memberStatuses)[number], updatedAt: new Date() })
+      .where(eq(schema.members.id, memberId));
+  }
+
+  await logAudit({
+    actorUserId: userId,
+    action: "membership.edited",
+    entityType: "membership",
+    entityId: membershipId,
+    details: { before, after: { planId, status, startDate, nextDueDate, priceAtSignup, visitsRemaining, autoRenew } },
+  });
+  revalidateMember(memberId);
+}
+
+export async function deleteMembership(formData: FormData) {
+  const { userId } = await requireStaff(["ADMIN", "MANAGER"]);
+  const membershipId = Number(formData.get("membershipId"));
+  const memberId = Number(formData.get("memberId"));
+
+  const [membership] = await db.select().from(schema.memberships).where(eq(schema.memberships.id, membershipId)).limit(1);
+  if (!membership) return;
+
+  // Invoices/payments are financial records — detach rather than cascade-
+  // delete them, so a membership correction never erases the money trail.
+  // membershipChanges and membershipFreezes DO cascade (they're just history
+  // of the membership itself, meaningless once it's gone).
+  await db.update(schema.invoices).set({ membershipId: null }).where(eq(schema.invoices.membershipId, membershipId));
+  await db.update(schema.payments).set({ membershipId: null }).where(eq(schema.payments.membershipId, membershipId));
+  await db.delete(schema.memberships).where(eq(schema.memberships.id, membershipId));
+
+  await logAudit({
+    actorUserId: userId,
+    action: "membership.deleted",
+    entityType: "membership",
+    entityId: membershipId,
+    details: { membership },
+  });
+  revalidateMember(memberId);
+}
+
 // --- Payments -------------------------------------------------------------
 
 export async function recordRenewalPayment(formData: FormData) {
