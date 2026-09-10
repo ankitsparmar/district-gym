@@ -1,6 +1,11 @@
 import type { Metadata } from "next";
 import "./globals.css";
 
+// The whole app reads from Postgres per-request (session-aware pages, live
+// membership/finance data) and there's no production DB reachable at build
+// time, so nothing here should be statically prerendered.
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "District Gym",
   description: "Membership, financial, and member management for District Gym",
